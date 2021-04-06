@@ -7,6 +7,7 @@ package redigomock
 import (
 	"fmt"
 	"reflect"
+	"strings"
 	"sync"
 )
 
@@ -56,6 +57,14 @@ func equal(commandName string, args []interface{}, cmd *Cmd) bool {
 	return true
 }
 
+// return true if the args may have issue with sorting
+func isOutOfOrderArgs(commandName string) bool {
+	if strings.ToLower(commandName) == "hmset" {
+		return true
+	}
+	return false
+}
+
 // match check if provided arguments can be matched with any registered
 // commands
 func match(commandName string, args []interface{}, cmd *Cmd) bool {
@@ -63,16 +72,33 @@ func match(commandName string, args []interface{}, cmd *Cmd) bool {
 		return false
 	}
 
-	for pos := range cmd.args {
-		if implementsFuzzy(cmd.args[pos]) {
-			if cmd.args[pos].(FuzzyMatcher).Match(args[pos]) == false {
+	if isOutOfOrderArgs(commandName) {
+		found := false
+		for pos := range cmd.args {
+			for i := range args {
+				if reflect.DeepEqual(cmd.args[pos], args[i]) {
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				break
+			}
+		}
+		return found
+	} else {
+		for pos := range cmd.args {
+			if implementsFuzzy(cmd.args[pos]) {
+				if cmd.args[pos].(FuzzyMatcher).Match(args[pos]) == false {
+					return false
+				}
+			} else if reflect.DeepEqual(cmd.args[pos], args[pos]) == false {
 				return false
 			}
-		} else if reflect.DeepEqual(cmd.args[pos], args[pos]) == false {
-			return false
 		}
+		return true
 	}
-	return true
 }
 
 // Expect sets a response for this command. Every time a Do or Receive method
